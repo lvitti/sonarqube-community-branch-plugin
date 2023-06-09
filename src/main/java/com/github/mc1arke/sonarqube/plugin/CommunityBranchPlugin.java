@@ -73,6 +73,8 @@ import org.sonar.core.extension.CoreExtension;
 public class CommunityBranchPlugin implements Plugin, CoreExtension {
 
     public static final String IMAGE_URL_BASE = "com.github.mc1arke.sonarqube.plugin.branch.image-url-base";
+    public static final String SUBCATEGORY_BRANCH = "Branch";
+    public static final String PR_DELETE_OLD_ANALYSIS_SUMMARY = "com.github.mc1arke.sonarqube.plugin.branch.pullrequest.summary.deleteOldDiscussions";
 
     @Override
     public String getName() {
@@ -157,6 +159,16 @@ public class CommunityBranchPlugin implements Plugin, CoreExtension {
                                           .build(),
                 MonoRepoFeature.class);
 
+            context.addExtensions(PropertyDefinition.builder(PR_DELETE_OLD_ANALYSIS_SUMMARY)
+                    .category(CoreProperties.CATEGORY_GENERAL)
+                    .subCategory(SUBCATEGORY_BRANCH)
+                    .onQualifiers(Qualifiers.PROJECT)
+                    .name("Delete old summary")
+                    .description("Delete old summary discussions (Gitlab only).")
+                    .type(PropertyType.BOOLEAN)
+                    .defaultValue(String.valueOf(false))
+                    .index(4)
+                    .build());
         }
     }
 

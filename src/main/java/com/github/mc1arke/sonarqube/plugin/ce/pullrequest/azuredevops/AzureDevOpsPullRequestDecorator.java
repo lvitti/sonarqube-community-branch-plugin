@@ -18,6 +18,7 @@
  */
 package com.github.mc1arke.sonarqube.plugin.ce.pullrequest.azuredevops;
 
+import com.github.mc1arke.sonarqube.plugin.CommunityBranchPlugin;
 import com.github.mc1arke.sonarqube.plugin.almclient.azuredevops.AzureDevopsClient;
 import com.github.mc1arke.sonarqube.plugin.almclient.azuredevops.AzureDevopsClientFactory;
 import com.github.mc1arke.sonarqube.plugin.almclient.azuredevops.model.Comment;
@@ -245,4 +246,11 @@ public class AzureDevOpsPullRequestDecorator extends DiscussionAwarePullRequestD
         return parseIssueDetails(client, note, "See in SonarQube", NOTE_MARKDOWN_LEGACY_SEE_LINK_PATTERN);
     }
 
+    @Override
+    protected void deleteOldSummaryDiscussions(AzureDevopsClient client, PullRequest pullRequest, AnalysisDetails analysis){
+        if (analysis.getScannerProperty(CommunityBranchPlugin.PR_DELETE_OLD_ANALYSIS_SUMMARY)
+                .map(Boolean::parseBoolean)
+                .orElse(Boolean.FALSE))
+            throw new IllegalStateException("Delete old discussions is not supported for AzureDevOps");
+    }
 }
