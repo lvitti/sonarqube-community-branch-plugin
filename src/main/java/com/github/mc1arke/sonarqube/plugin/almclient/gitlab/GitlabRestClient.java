@@ -31,10 +31,7 @@ import com.github.mc1arke.sonarqube.plugin.almclient.gitlab.model.User;
 import org.apache.http.HttpResponse;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.entity.UrlEncodedFormEntity;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.client.methods.HttpPut;
-import org.apache.http.client.methods.HttpRequestBase;
+import org.apache.http.client.methods.*;
 import org.apache.http.entity.ContentType;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.message.BasicNameValuePair;
@@ -124,6 +121,14 @@ class GitlabRestClient implements GitlabClient {
         HttpPost httpPost = new HttpPost(targetUrl);
         httpPost.setEntity(new UrlEncodedFormEntity(Collections.singletonList(new BasicNameValuePair("body", noteContent)), StandardCharsets.UTF_8));
         entity(httpPost, null, httpResponse -> validateResponse(httpResponse, 201, "Commit discussions note added"));
+    }
+
+    @Override
+    public void deleteMergeRequestDiscussionNote(long projectId, long mergeRequestIid, String discussionId, long noteId) throws IOException {
+        String noteIdUrl = String.format("%s/projects/%s/merge_requests/%s/discussions/%s/notes/%s", baseGitlabApiUrl, projectId, mergeRequestIid, discussionId, noteId);
+
+        HttpDelete httpDel = new HttpDelete(noteIdUrl);
+        entity(httpDel, null, httpResponse -> validateResponse(httpResponse, 204, "Discussion note deleted"));
     }
 
     @Override

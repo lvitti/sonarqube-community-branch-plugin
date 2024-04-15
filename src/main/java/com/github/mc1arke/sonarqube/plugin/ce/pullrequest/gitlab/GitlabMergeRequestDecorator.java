@@ -18,6 +18,7 @@
  */
 package com.github.mc1arke.sonarqube.plugin.ce.pullrequest.gitlab;
 
+import com.github.mc1arke.sonarqube.plugin.CommunityBranchPlugin;
 import com.github.mc1arke.sonarqube.plugin.almclient.gitlab.GitlabClient;
 import com.github.mc1arke.sonarqube.plugin.almclient.gitlab.GitlabClientFactory;
 import com.github.mc1arke.sonarqube.plugin.almclient.gitlab.model.Commit;
@@ -36,15 +37,15 @@ import com.github.mc1arke.sonarqube.plugin.ce.pullrequest.report.AnalysisIssueSu
 import com.github.mc1arke.sonarqube.plugin.ce.pullrequest.report.AnalysisSummary;
 import com.github.mc1arke.sonarqube.plugin.ce.pullrequest.report.ReportGenerator;
 import org.sonar.api.ce.posttask.QualityGate;
+import org.sonar.api.utils.log.Logger;
+import org.sonar.api.utils.log.Loggers;
 import org.sonar.ce.task.projectanalysis.scm.ScmInfoRepository;
 import org.sonar.db.alm.setting.ALM;
 import org.sonar.db.alm.setting.AlmSettingDto;
 import org.sonar.db.alm.setting.ProjectAlmSettingDto;
 
 import java.io.IOException;
-import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class GitlabMergeRequestDecorator extends DiscussionAwarePullRequestDecorator<GitlabClient, MergeRequest, User, Discussion, Note> {
@@ -55,6 +56,19 @@ public class GitlabMergeRequestDecorator extends DiscussionAwarePullRequestDecor
 
     private final GitlabClientFactory gitlabClientFactory;
     private final MarkdownFormatterFactory formatterFactory;
+
+    // string hints that a certain comment is indeed a summary
+    private static final Set<String> SUMMARY_COMMENT_HINTS = new HashSet<>(Arrays.asList(
+            "Analysis Details",
+            "Issue",
+            "Bug",
+            "Vulnerability",
+            "Code Smell",
+            "Coverage and Duplications",
+            "View in SonarQube"
+    ));
+
+    private static final Logger LOGGER = Loggers.get(GitlabMergeRequestDecorator.class);
 
     public GitlabMergeRequestDecorator(ScmInfoRepository scmInfoRepository, GitlabClientFactory gitlabClientFactory, ReportGenerator reportGenerator, MarkdownFormatterFactory formatterFactory) {
         super(scmInfoRepository, reportGenerator);
@@ -224,4 +238,62 @@ public class GitlabMergeRequestDecorator extends DiscussionAwarePullRequestDecor
         }
     }
 
+    @Override
+    protected void deleteOldSummaryDiscussions(GitlabClient client, MergeRequest pullRequest, AnalysisDetails analysis) {
+        Boolean deleteSummaryResolved = analysis.getScannerProperty(CommunityBranchPlugin.PR_DELETE_OLD_ANALYSIS_SUMMARY)
+                .map(Boolean::parseBoolean)
+                .orElse(Boolean.FALSE);
+
+        LOGGER.info("PR_DELETE_ANALYSIS_SUMMARY: %s", deleteSummaryResolved.toString());
+
+        LOGGER.info(String.format("cleanOldSummaryNotes PR: %s", pullRequest.getIid() ));
+        User currentUser = getCurrentUser(client);
+
+        var discussions = this.getDiscussions(client, pullRequest).stream()
+                .filter(discussion -> isSummary(client, discussion))
+                .collect(Collectors.toList());
+
+        LOGGER.info(String.format("cleanOldSummaryNotes Discussions: %s", discussions.stream().count() ));
+
+        for (var discussion : discussions) {
+            if (getNotesForDiscussion(client, discussion).stream()
+                    .filter(this::isUserNote)
+                    .anyMatch(note -> !isNoteFromCurrentUser(note, currentUser))) {
+                LOGGER.info(String.format("cleanOldSummaryNotes Discussion: %s cannot be deleted because has new notes", discussion.getId() ));
+            }else{
+                try {
+                    LOGGER.info(String.format("cleanOldSummaryNotes Deleting discussion: %s", discussion.getId() ));
+                    deleteDiscussion(client, discussion, pullRequest);
+                } catch (IOException ex) {
+                    throw new IllegalStateException("Could not delete Merge Request Summary discussion", ex);
+                }
+            }
+        }
+    }
+
+    private boolean isSummaryNote(GitlabClient client, Note note) {
+        String noteContent = getNoteContent(client, note);
+        return SUMMARY_COMMENT_HINTS.stream().allMatch(hint -> noteContent.contains(hint));
+    }
+
+    private boolean isSummary(GitlabClient client, Discussion discussion) {
+        return discussion.getNotes().stream().anyMatch(note -> isSummaryNote(client, note));
+    }
+
+    private void deleteDiscussion(GitlabClient client, Discussion discussion, MergeRequest pullRequest) throws IOException {
+        User currentUser = getCurrentUser(client);
+        var userNotes = discussion.getNotes().stream()
+                .filter(note -> isNoteFromCurrentUser(note, currentUser))
+                .collect(Collectors.toList());
+
+        for (var note: userNotes) {
+            LOGGER.info(String.format("Deleting discussion note_id: %s, %s", note.getId(), note.getBody()));
+            client.deleteMergeRequestDiscussionNote(
+                    pullRequest.getTargetProjectId(),
+                    pullRequest.getIid(),
+                    discussion.getId(),
+                    note.getId()
+            );
+        }
+    }
 }

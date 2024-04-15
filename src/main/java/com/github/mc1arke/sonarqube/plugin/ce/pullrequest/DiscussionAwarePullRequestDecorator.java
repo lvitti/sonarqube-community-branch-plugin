@@ -78,6 +78,8 @@ public abstract class DiscussionAwarePullRequestDecorator<C, P, U, D, N> impleme
                 .filter(comment -> !projectAlmSettingDto.getMonorepo() || isCommentFromCurrentProject(comment, analysis.getAnalysisProjectKey()))
                 .collect(Collectors.toList());
 
+        deleteOldSummaryDiscussions(client, pullRequest, analysis);
+        
         List<String> commentKeysForOpenComments = closeOldDiscussionsAndExtractRemainingKeys(client,
                 user,
                 currentProjectSonarqubeComments,
@@ -109,6 +111,8 @@ public abstract class DiscussionAwarePullRequestDecorator<C, P, U, D, N> impleme
         createFrontEndUrl(pullRequest, analysis).ifPresent(builder::withPullRequestUrl);
         return builder.build();
     }
+
+    protected abstract void deleteOldSummaryDiscussions(C client, P pullRequest, AnalysisDetails analysisDetails);
 
     protected abstract C createClient(AlmSettingDto almSettingDto, ProjectAlmSettingDto projectAlmSettingDto);
 
